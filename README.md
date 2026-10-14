@@ -22,5 +22,7 @@ An optional per-column block adds each column’s drift, plus its distance from 
 
 
 ### Improvement 4
-asda
-
+For your GRU, these results favour three focused experiments:
+1. Separate i0/i1 state descriptors: update activity, movement size conditional on updating, and short/long movement-scale ratios.
+2. Persistence and displacement features: recent changes, direction consistency and distance from causal baselines.
+3. Relationships between inputs: common movements and residual disagreements among the a features, followed by cross-instrument interactions.
