@@ -409,6 +409,11 @@ Those two are inversely correlated, with a certain gap, relating to execution, s
 2. Can we add book crossing? Can we also add specific events on i0_p0, can we also add some features for delay between book change and expected t0, t1 change? can we also add more activity and efficiency horizons?
 Can we also add orderbook direction changes due to the activities?
 3. Do we have anything measuring the entire orderbook, we tested and could sort the book by lowest to highest, but they were somewhat based on order queue, rather than index and say sometimes i0_p3 would be the closest to the current mid on the bid side and i0_p17 would be. But than it would shift and i0_p4 would be closest and i0_p19 would be closest. We need something measuring that and sorting it so we can understand what the slope, regime, best bid, best ask were and how the gap and behaviors would be.
+
+
+## Hypothesis tested
+
+
 4. for the detection of regimes, do we have anything measuring linear trend slope of say i0p0, i0p20, so and so on, along with the entire orderbook. We would want to measure if the book is moving upwards, so buying is best, if the book is moving down the sell is best.
 5. We want to also add something measuring chunkiness, say volatility of the book, say stds of all the prices, say something like various horizons, stds of all the prices on 12, 24, 36, 124, etc. rolling window. We also want to check those linear regression slopes for windows like that.
 6. WE should also do something like rolling correlations, it might be that adjusting different importances, say how important are moving averages if the correllations increase.
