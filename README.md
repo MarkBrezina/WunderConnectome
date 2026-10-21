@@ -1,293 +1,483 @@
-## Introduction
-
-I went at this competition because it popped up on Linkedin randomly. It seemed very oddly interesting and along the way I have dropped much of my desire to finish properly.
-Mostly due to the fact I found out Wunderfund is a russian HFT firm, actively advertising to russians.
-My family was driven out of Czechia due to russian invasion, and I am therefore strongly inclined to drop genuine participation.
-
-However, as a person to another person, I am therefore significantly more incline to give away findings.
-The actual struggle, working out of 1 laptop with at max 2gb to spare for training loops and having to spend about 9 hours per day at work as customer service.
-Meant I had very limited time to run code, do experiments and let models train. I would regularly setup a training session and leave my laptop to run for the day
-
-## Targets
-Being a quant for the sake of quant, rather than for the sake of AI, ML or otherwise.
-My initial goal was to figure out, what the fuck are we actually targetting?
-
-My initial idea was to stupidly believe what Wunderfund wrote on the hero in the index screen.
-We are predicting future prices, I therefore ran a range of tests to show that t0 and t1 had to do with microprice, volume weighted moving price and more.
-These all fell flat and never picked up in any way. Some things did become conclusive from it in a better manner, but we'll take that later.
-
-I than believed targets might be something more trading oriented, say optimal inventory for asset i0 and asset i1.
-Which made a lot of sense, but also showed to be inconclusive.
-
-At the end I understood, that t0 and t1 was correlated but inversely, the targets were also correlated with price.
-
-It seemed that The targets were buying edge and sell edge, so these are "of course" related to each other.
-Buy now sell later, short now buy back later are inversely correlated and as correctly can be pointed out.
-Those two are inversely correlated, with a certain gap, relating to execution, slippage, fee and more.
-But they are also somewhat positively related, if one says buy now sell later, t0 will be buy now, t1 will be sell later.
-But in reverse, t1 will be sell now, t0 will be buyback later.
-
 # Connectome research log
 
-Oct 21, 2026 · @Mark
+Mark Brezina · Revised 21 October 2026
 
-## How to read and update this log
+This is the working account of the project: what I observed, what I think might explain it, what I tested, and what should change next. Hypothesis IDs refer to the supplied `HYPOTHESIS_REGISTER.md`. The numbered experiments below are a shortlist within that larger register, not twenty independent discoveries.
 
-Each hypothesis carries one verdict, the evidence behind it and the next test. When a result lands, add it to the run log, then update the register row. When a claim is walked back, add a row to the corrections log.
+## 1. Introduction
 
-| Verdict | Meaning |
+I came across the Connectome competition on LinkedIn and joined because the problem looked unusually interesting. My interest in pursuing the competition seriously later declined for personal and historical reasons. My family was displaced by the Soviet invasion of Czechoslovakia, and my concerns about the organiser's Russian connections changed how I felt about participating. I became more interested in documenting and sharing the research.
+
+The practical constraints also shaped the project. I worked mainly on a laptop with roughly 2 GB of RAM available for training, alongside a customer-service job taking about nine hours of my day. Many experiments consisted of preparing a run in the evening and leaving the laptop working while I was at work. These constraints affected batch sizes, backpropagation lengths and the number of comparisons I could complete.
+
+My starting point was quantitative research: before changing architectures, I wanted to understand what the inputs and targets represented. I explored price-like components, numerical weighted sums, event timing, target relationships and possible execution-edge interpretations. Some tests revealed useful statistical structure. Others mainly exposed assumptions that needed correcting.
+
+The aim of this log is to preserve both outcomes. A plausible market explanation is a hypothesis; a repeatable association is evidence; a better held-out competition score is a separate result.
+
+## 2. Current position
+
+The strongest returned model on the common 300-sequence focus screen remains the **v8.1 base ensemble with scored-row head fine-tuning**, at **0.646531 masked WP**. The newer heads/flow and FiLM recipes have not replaced it.
+
+My current description is a single GRU trained on all approximately 10,000 training sequences. The attached older commands use `hidden=128`; **112 is the raw input count**, not evidence of a hidden size. If the newest model really has 112 hidden units, that belongs in its own run manifest. Its exact checkpoint/configuration and a matched score are needed before treating it as identical to the frozen reference.
+
+| Decision | Current position |
 | --- | --- |
-| Supported | Held on held-out sequences: the interval excludes zero or the pattern replicated |
-| Partly supported | Part of the claim holds; the rest is untested or contradicted |
-| Inconclusive | Tested, but the interval spans zero, the sample was small, or the test cannot decide |
-| No gain | A model change that did not beat its matched control |
-| Rejected | Tested and contradicted |
-| Open | Not yet tested |
+| Submission candidate | Preserve the strongest base-scored ensemble while testing challengers. |
+| Separate nonlinear t0/t1 heads | No repeatable matched gain established; defer further complexity here. |
+| Changing FiLM context | The tested signal hurt relative to constant context; defer this implementation. |
+| More data | Reported as useful historically; the latest larger run changed other settings too. A clean learning curve remains useful. |
+| Rolling and emergent behaviour | Still plausible. Test compact joint dynamics against the competitive GRU's remaining errors. |
+| Next substantial training | Reproduce the stronger base recipe, then test one justified addition. |
 
-Scores from different partitions are not comparable. The uploaded reference scores 0.6457 on the focus screen and 0.6791 on the confirmation set.
+The reported leaderboard benchmark of **0.672** is a historical comparison from the project notes, not a freshly verified leading score. The reference's **0.679120 local confirmation score** uses another sample and does not show that it beat that leaderboard. No fixed local-to-leaderboard offset has been established.
 
-| Partition | Size | Used for |
-| --- | --- | --- |
-| focus\_screen | 300 sequences, 580,714 scored rows | Ensemble assessments (evaluate\_next) |
-| screen | 420 sequences, 797,169 scored rows | v7 matched single runs |
-| calibration | 120 sequences, 24 held out | Scoring-mask model |
-| confirmation | Size not recorded here | One frozen check per candidate |
-| internal dev | 300 training sequences, all rows from step 99 | Checkpoint selection only |
+## 3. Data and objective
 
-Dev WP (about 0.40, all rows) and masked WP (about 0.63) measure different rows. Regime buckets are refitted per run: "quiet" held 85,696 rows in the regimes report and 102,785 in the v8.2 report. Compare buckets within one report only.
+The official specification describes 112 inputs. Both targets concern the future movement of **i0**; their exact formulas are undisclosed. The second instrument, i1, is an input. Documented bid/ask membership is determined by the index group, while index is not depth order. [S1]
 
-## Where things stand
+| Inputs | Count |
+| --- | ---: |
+| i0: 22 price-like, 22 volume-like, 4 trade-price, 4 trade-volume | 52 |
+| i1: corresponding groups | 52 |
+| a0–a7 | 8 |
 
-The submission candidate is the v8.1 base with scored fine-tuning: 0.6465 masked WP on the focus screen, +0.0008 over the uploaded reference. Nothing trained since v7 comes within 0.018 of it.
+The supplied parquet-derived notebook inventory reports 10,607 train and 1,873 validation sequences, each containing 20,000 rows. These counts describe those files, rather than how many sequences a particular fit actually used.
 
-&#91;embedded content: evaluate\_next.py assessments, focus\_screen partition: 300 sequences, 580,714 scored rows\]
+WP pools the selected rows globally, separately by target, then averages the two correlations. Selection is `need_prediction AND is_scored`; targets and predictions are clipped to [-2, 2], with weight equal to the absolute clipped target. The callback receives neither targets nor `is_scored`. [S1]
 
-| Item | Value |
+For a fixed target, let y and p denote the clipped labels and predictions, and w = |y|. The corresponding weighted correlation is
+
+$$
+r_w = \frac{\sum_i w_i(y_i-\bar y_w)(p_i-\bar p_w)}
+{\sqrt{\sum_i w_i(y_i-\bar y_w)^2\sum_i w_i(p_i-\bar p_w)^2}}.
+$$
+
+Consequences for this project:
+
+- Average predictions first, then recompute WP. Averaging the scores of individual runs does not score an ensemble.
+- Keep masked and all-eligible-row results separate. Neither a mean of sequence correlations nor a mean of regime correlations is the official global score.
+- A flat target can have substantial weight and still require an updated prediction as new information arrives.
+- Positive affine rescaling leaves an unclipped Pearson correlation unchanged. Clipping can make output scaling matter; it should be tested separately.
+- The two targets use different magnitude weights. Ordinary Pearson correlation is symmetric; differently weighted target comparisons can be asymmetric without implying directional influence.
+
+State must advance on every row and reset between sequences. The stated execution budget is one CPU core, 16 GB RAM and 60 minutes for the complete test set. [S2]
+
+## 4. Evidence language and updating rules
+
+Each hypothesis needs **two statuses**: one for the proposed explanation and one for predictive usefulness. Descriptive evidence for a regime does not establish a benefit from regime conditioning.
+
+| Status | Meaning |
 | --- | --- |
-| Packaged ZIP | submission\_v7\_best.zip (uploaded reference); not yet rebuilt for the v8.1 candidate |
-| ZIP confirmation WP | 0.6791 (t0 0.6807, t1 0.6775). The challenger equalled the reference, so no improvement was shown |
-| Callback speed | 75.7 µs per row; 49.8 of 60 minutes projected including start-up, if the test set matches valid in size |
-| Checks passed | Model hash, model order and weights, callback/cache parity, reset, output contract, staged smoke test |
-| Best single v7 run | Flow block, seed 1: 0.6346 on the 420-sequence screen |
-| Leaderboard | Top score 0.672 (mid-October). v2 dropped 0.015 from valid (0.6532) to public (0.638) |
+| Observed | A numerical regularity in the stated sample; mechanism is unresolved. |
+| Supported in this comparison | The specified candidate improved under the recorded protocol. Generalisation still depends on validation history. |
+| Inconclusive | The test cannot distinguish a useful effect from noise or has insufficient coverage. |
+| Against this implementation | The tested version underperformed or contradicted the stated claim. |
+| Confounded | Multiple changes prevent attribution. |
+| Implemented, result incomplete | Code or partial output exists; a completed comparison does not. |
+| Open | A proposal without an adequate test. |
+| Oracle only | Uses labels or future information unavailable to the live model. |
 
-## Run log
+Keep failed versions in the record. Replace broad language such as “volatility is irrelevant” with “this volatility block did not improve this model under this protocol.” Do not count a synthetic software test as market evidence.
 
-Scored fine-tuning is the only change whose interval sits above zero every time it was compared with an unweighted fine-tune. Each row is a paired contrast on the same sequences, newest run first. Intervals are 95% whole-sequence bootstraps, conditional on the fitted seeds.
+## 5. Scores that can be compared
 
-| Run | Comparison | Partition | Δt0 | Δt1 | ΔWP \[95% interval\] | Register |
-| --- | --- | --- | --- | --- | --- | --- |
-| v8.2 regimes | FiLM, constant context − control | focus, 300 seqs | +0.0034 | +0.0010 | +0.0022 \[−0.0003, +0.0048\] | E3 |
-| v8.2 regimes | FiLM, changing context − constant context | focus, 300 seqs | −0.0041 | −0.0022 | −0.0031 \[−0.0050, −0.0013\] | E3 |
-| v8.2 regimes | Uploaded reference − regimes control | focus, 300 seqs | +0.0198 | +0.0218 | +0.0208 \[+0.0149, +0.0266\] | E7 |
-| v8.2 | Scored fine-tune − unweighted fine-tune | focus, 300 seqs | +0.0003 | +0.0008 | +0.0005 \[+0.0004, +0.0006\] | C4 |
-| v8.2 | Scored fine-tune − parent | focus, 300 seqs | −0.0001 | +0.0006 | +0.0003 \[−0.0003, +0.0007\] | C4 |
-| v8.2 | v8.1 heads + scored − v8.2 unweighted fine-tune | focus, 300 seqs | −0.0028 | −0.0006 | −0.0017 \[−0.0063, +0.0027\] | E2 |
-| v8.1 | Base scored fine-tune − uploaded reference | focus, 300 seqs | +0.0004 | +0.0012 | +0.0008 \[+0.0005, +0.0011\] | C4 |
-| v8.1 heads | Scored fine-tune − unweighted fine-tune | focus, 300 seqs | +0.0004 | +0.0010 | +0.0007 \[+0.0005, +0.0010\] | C4 |
-| v8.1 heads | Scored fine-tune − parent (v7 heads) | focus, 300 seqs | +0.0004 | +0.0010 | +0.0007 \[+0.0005, +0.0009\] | C4 |
-| v7 features | Event block − control, mean of two single runs | screen, 420 seqs | +0.0002 | −0.0013 | −0.0006 \[−0.0041, +0.0038\] | D5 |
-| v7 features | Flow block − control, mean of two single runs | screen, 420 seqs | +0.0030 | +0.0024 | +0.0027 \[−0.0009, +0.0069\] | D6 |
+### 5.1 Common focus screen: actual prediction ensembles
 
-- **Seed noise is 6–12 times what the ratchet assumes.** Seeds of one configuration differ by 0.0034 (control), 0.0040 (event) and 0.0071 (flow) on the screen. R0's 0.0006 came from the kit defaults. Flow's +0.0027 is −0.0025 for seed 0 and +0.0080 for seed 1.
-- **The scoring mask is only weakly predictable.** On 24 held-out calibration sequences: AUC 0.584, average precision 0.138 against a 0.108 base rate, Brier loss 0.8% below a constant. Enough to keep the direct-mask fine-tune; not enough for a proxy-weighted long run.
-- **The reference's lead is largest in chop.** Over the regimes control it leads by +0.034 \[+0.016, +0.050\] in choppy rows and +0.049 \[+0.002, +0.091\] in quiet-choppy rows, against +0.014 \[+0.010, +0.017\] in strongly active, directional rows.
+All rows in this table use the reported **300 sequences and 580,714 scored rows**. Equal seed weighting was used; these are prediction ensembles, not averages of individual scores.
 
-## Hypothesis register
+| Recipe | t0 | t1 | Masked WP | All-eligible WP |
+| --- | ---: | ---: | ---: | ---: |
+| Original uploaded reference | 0.646955 | 0.644503 | 0.645729 | 0.512908 |
+| v8.1 base + scored fine-tuning | 0.647388 | 0.645674 | **0.646531** | 0.512825 |
+| v7 heads/flow parents | 0.625810 | 0.624191 | 0.625001 | 0.483148 |
+| v8.1 heads/flow + scored fine-tuning | 0.626223 | 0.625183 | 0.625703 | 0.483249 |
+| v8.2 larger heads/flow parents | 0.629338 | 0.625930 | 0.627634 | 0.484869 |
+| v8.2 larger heads/flow + unweighted fine-tuning | 0.629012 | 0.625747 | 0.627380 | 0.484524 |
+| v8.2 larger heads/flow + scored fine-tuning | 0.629278 | 0.626504 | 0.627891 | 0.484478 |
+| Regimes: ordinary control | 0.627147 | 0.622719 | 0.624933 | 0.480951 |
+| Regimes: constant FiLM context | 0.630533 | 0.623722 | 0.627127 | 0.482917 |
+| Regimes: changing FiLM context | 0.626462 | 0.621507 | 0.623985 | 0.478720 |
 
-The target structure is well established (B1–B3), but almost every attempt to exploit more of it than the base GRU already does has shown no gain at matched settings (D, E). The verdict column is a dropdown: change it when the evidence changes, and say why in the evidence cell.
+| Paired contrast | ΔWP | Reported 95% sequence interval | Interpretation |
+| --- | ---: | --- | --- |
+| Base-scored − uploaded reference | +0.000802 | [+0.000455, +0.001130] | A small supported improvement on this screen. |
+| Heads/flow-scored − its parents | +0.000702 | [+0.000541, +0.000855] | Fine-tuning helps this weaker family too. |
+| Larger-scored − its unweighted fine-tune | +0.000511 | [+0.000368, +0.000646] | Supports the fine-tuning choice. |
+| Larger-scored − earlier heads/flow-scored | +0.002188 | [-0.002206, +0.006750] | Inconclusive; not a clean data-size experiment. |
+| Larger-scored − best base-scored | -0.018640 | [-0.026922, -0.009269] | This newer recipe is materially weaker here. |
+| Constant FiLM − ordinary control | +0.002195 | [-0.000253, +0.004784] | Extra capacity alone has no confirmed win. |
+| Changing FiLM − constant FiLM | -0.003143 | [-0.004986, -0.001297] | Against the tested changing-context mechanism. |
 
-### A. Encoding and book structure
+Intervals condition on the fitted models/seeds and their actual validation history. They do not account for every hypothesis tried, seed uncertainty or distribution shift. The broad reference-versus-heads/flow gap cannot be attributed to separate heads alone: features, training budgets and other settings differ.
 
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| A1 | The 22 price columns are a sorted ladder whose columns were shuffled | Sorted medians track normal quantiles (r 0.999). The home order replicates across sequences and is the same for i0 and i1. Only \~67% of held-out rows are fully in order; crossings sit in a few pairs (p4/p7 \~28%, p10/p20 \~13%). | Partly supported | Run the shape block in a GRU beside the raw columns (D7) |
-| A2 | The schema split (p0–10 bid, p11–21 ask) gives a valid book | Crossed on 100% of rows when values are compared across columns. Corrected 17 Oct: the schema's sides stand; the crossing shows encoded values cannot be compared across columns. | Inconclusive | None planned |
-| A3 | Prices are discrete ticks | \~500 distinct values per column and no exact repeats. A continuous transform could hide discrete ticks. | Inconclusive | Tolerance-based shift test, only if decoding becomes a priority |
-| A4 | v\_k is the queue size at p\_k (pairing by suffix) | Suffix pairing matches 3 of 22 levels (i0) and 4 of 22 (i1). Lagged links exist: v17 to v14 adds \~0.19 held-out R² (i0). | Rejected | Test the lag links as features |
-| A5 | p0 is the touch level | p0 sits deep (−1 to −2.2) and never crossed p1 in 2,000 rows. Corrected 17 Oct: per-column transforms mean raw position cannot settle it. | Inconclusive | None planned |
-| A6 | An i0 price event re-encodes the whole book | All 22 columns change on 96–97% of i0 price-event rows; the first principal component holds 56% of change variance (i1: 91–92%, 45%). | Supported | — |
-| A7 | Consecutive events flicker back and forth | Event-lag correlation alternates sign out to ±150 events. Large single-column jumps retrace 53–66% within 8–32 rows. | Supported | Count only events that do not revert within 1–2 events |
-| A8 | t0 and t1 are sums of p×v | 0% tolerance matches, \|r\| ≤ 0.13; −0.0037 WP as features. | Rejected | — |
-| A9 | i0 and i1 share each column's home value | Identical medians and snapshot values. | Supported | Basis i0\_pk − i1\_pk against its own EWMA (N3) |
+### 5.2 Other samples: preserve their scope
 
-### B. Targets
-
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| B1 | The targets are a smoothed future move over \~100–200 rows | ACF 0.97 at lag 1, 0.45–0.6 at lag 100, \~0 by 500–1,000. Flat on 97% of rows; 21% of values exactly zero. | Supported | — |
-| B2 | The targets change only on i0 price-event rows | P(change \| no i0 price event) = 0.000; lift 9.2. The reverse does not hold: one inner-rank trigger changed t0 on \~35% and t1 on \~34% of its rows. | Supported | Between i0 events the target is constant; test an output-update gate (N5) |
-| B3 | The targets react to the current and the next i0 event | Signature peaks at k = 0 and k + 1, \|r\| 0.34–0.54 (50 sequences); i1 events show \~0. The k + 1 peak uses a future event, so it is a diagnostic only. | Supported | — |
-| B4 | t0 is the long round-trip edge and t1 the short one, sharing a cost | t1 = −0.976·t0 + s; s is negative on 90% of rows and t0 + t1 < 0 on 87%. The other 13% is not yet split into zero and positive. The trading meaning remains a working interpretation. | Partly supported | Report negative, zero and positive shares of t0 + t1 before any sign constraint |
-| B5 | The shared cost tracks the inner gap | Correlation −0.19 in levels, −0.35 within sequences, −0.76 in first differences. R² of the target sum: gap alone 0.03, all prices 0.22, richer state 0.25. | Partly supported | — |
-| B6 | Deriving t1 from a t0 prediction plus a gap model beats predicting t1 directly | Derived 0.541 against 0.663 direct (100 valid sequences); best stacked blend +0.0007. The GRU's implied gap already beats the gap model (corr 0.463 against 0.417). | Rejected | — |
-| B7 | The opposing factor (z0 − z1) is the predictable part | It holds 82–88% of the variance, but the common factor is more predictable: linear R² 0.23–0.24 against 0.05–0.07. | Rejected | — |
-| B8 | The targets relate to future displacement of the i0 columns | \|r\| 0.10–0.17 at 200–1,000 rows, same sign from train to dev (diagnostic). | Partly supported | Use as an auxiliary training target (N4) |
-| B9 | The alternating auxiliary sum −a0 + a1 − … + a7 tracks the targets | Held-out R² ≤ 0. | Rejected | — |
-| B10 | t0 and t1 swap roles (buy and sell) in some states | No evidence. Their relative strength reverses and feature associations can flip; the identities have not been shown to swap. | Open | Keep fixed t0 and t1 outputs, with no swap rule |
-
-### C. Scoring mask
-
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| C1 | Scored rows are easier to predict than the rest | Same 300 sequences: masked WP 0.627 against 0.485 on all eligible rows (v8.2 control). Earlier: dev on all rows \~0.43 against valid on scored rows \~0.655. | Supported | — |
-| C2 | Scored rows are enriched on i1 price changes | Share of rows scored (120 calibration sequences): neither instrument changed 9.01%, only i0 6.49%, only i1 14.86%, both 14.88%. | Supported | — |
-| C3 | The mask can be predicted from causal inputs | AUC 0.584; average precision 0.138 against a 0.108 base rate; Brier loss 0.8% lower (24 held-out sequences). Weak. | Partly supported | Defer proxy-weighted training |
-| C4 | Fine-tuning toward scored rows raises masked WP | Beats an unweighted fine-tune in both runs (+0.0007, +0.0005) and the base gains +0.0008 over its parent, all intervals above zero. v8.2 against its own parent is inconclusive. See run log. | Supported | Keep in every final model |
-| C5 | The mask favours rows where t0 or t1 change | Not tested directly. Leans against: targets change only on i0 price rows, yet rows where only i0 changed are scored less often (6.5%) than rows with no price change (9.0%). | Open | Notebook: P(scored \| target changed) against unchanged, and the share of scored weight on unchanged rows (N2) |
-
-### D. Features
-
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| D1 | Smoother residuals (x − EWMA, SMA, WMA) add information | Horizons lab +0.0055 \[+0.0014, +0.0085\] (20 train, 8 dev sequences). Later probes +0.0008 and +0.0088, both intervals spanning zero. GRU pilot: t0 +0.032, t1 −0.032. In the kit as 12 residuals, one horizon each (mostly 512 rows); never ablated alone at scale. | Inconclusive | Multi-horizon residuals per price (N7); ablate against none at matched settings |
-| D2 | Momentum x\[t\] − x\[t−w\] | +0.0005 and −0.006. | Rejected | — |
-| D3 | Volatility of changes (std, RMS, mean absolute) | +0.0031 \[−0.0065, +0.0110\] and −0.0097. Model WP still differs by volatility bucket (0.457 against 0.683 in one research model). | Inconclusive | Level std, change std and jump concentration as separate measures |
-| D4 | Timing features (ages, shocks, update-clock EWMA) | Ridge −0.016 \[−0.031, −0.001\]. | Rejected | Superseded by the event block |
-| D5 | Event block (40: ages, intervals, persistence, event-clock EWMAs) | GRU, two seeds: −0.0006 \[−0.0041, +0.0038\]. | No gain | Recheck only on a matched-settings base |
-| D6 | Flow block (36: volume, dp and dv update statistics) | GRU, two seeds: +0.0027 \[−0.0009, +0.0069\]; the seeds disagree (−0.0025 and +0.0080). | Inconclusive | Retest on a matched-settings base (N1) |
-| D7 | Shape block (26: sorted ladder, central gap, centre, range) | Built in v7; never run. | Open | One matched two-seed run (N8) |
-| D8 | Context block (14: expanding-prefix statistics) | Built in v7; never run. The per-sequence mean oracle (0.695) says sequence-level information is worth having. | Open | One matched two-seed run (N8) |
-| D9 | Group state descriptors (activity, RMS scale, efficiency) | COMP\_TEST: t0 +0.087, t1 −0.018 on 6 sequences; interval spans zero. The legacy regime block (91) has never run. | Inconclusive | — |
-| D10 | Break detectors (AR innovations, CUSUM, Shiryaev–Roberts) | AR(level) −0.013; Shiryaev–Roberts −0.020 with interval below zero. | Rejected | — |
-| D11 | Auxiliary inputs a0–a7 as compressed or dynamic features | −0.001 and +0.0005; −0.030 when added to the masked-auxiliary variant. | Rejected | — |
-| D12 | Raw i1 inputs help the GRU | Pilot: masking i1 gave +0.045 \[+0.003, +0.076\] (32 train, 12 valid sequences, 2 epochs, 1 seed). Ridge with i0 + i1 0.403 against i0 alone 0.433. Signed lead-lag \|r\| < 0.01. Never tested at scale; every current model includes i1. | Inconclusive | i1-masked ablation at matched settings plus a lead-lag test on GRU residuals (N3) |
-| D13 | Volume imbalance by index half | Below noise on one sequence; index halves mix the two ladder sides. | Inconclusive | Retest on sorted sides |
-| D14 | Own-column reversion predicts the targets | r −0.30 to −0.62 against the column's own next change; mechanical (flicker plus shared current value). | Rejected | — |
-| D15 | Volatility changes how book moves map to the targets | corr(Δp0, target) 0.02 at low volatility, 0.07–0.12 at high. | Partly supported | — |
-| D16 | Book-features lab (1,261 features in 12 families) | Built 17 Oct; results not yet logged here. | Open | Promote a family only if ridge and GRU stacking both clear zero |
-
-### E. Architecture and training
-
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| E1 | More data and seed averaging help | R0 0.6551, two-seed pair 0.6570 (+0.0019, 600 valid sequences). The full-data model is the reference family. | Supported | — |
-| E2 | Separate t0 and t1 heads beat a shared head | Against the v8.2 unweighted fine-tune −0.0017 \[−0.0063, +0.0027\]; against the regimes control +0.0008 \[−0.0028, +0.0039\]. Earlier pilot −0.003. | No gain | Defer |
-| E3 | FiLM regime conditioning helps | Constant context +0.0022 \[−0.0003, +0.0048\] over control; changing context −0.0031 \[−0.0050, −0.0013\] against constant, worst in active (−0.0036) and directional (−0.0045) rows. Any gain comes from the extra layer, not the regime signal. | Rejected | Defer until the base is competitive |
-| E4 | Soft GMM regime experts | t0 0.503 and t1 0.386, both below the single model; difference interval below zero (6 sequences). | Rejected | — |
-| E5 | Correlation-hybrid loss | 0.4394 against 0.4535 for two-head MSE (pilot). | No gain | — |
-| E6 | Row TCN beside the GRU, skip MLP, weighted Huber | TCN 0.4510 against 0.4563 baseline; skip MLP −0.042; weighted Huber −0.019 (pilot). | No gain | — |
-| E7 | The \~0.02 gap to the reference comes from the training setup, not the architecture | Post-v7 ensembles score 0.624–0.628; the reference family 0.6457–0.6465 on the same sequences. The lead is largest in chop. The v7 runs used 2,500 sequences, 4 sequences per step and 256-row backprop chunks; the kit defaults are 32 and 1,000, and the reference used all \~10,000 sequences (to confirm). v8.2, described as larger, still scored 0.6279. | Open | Retrain the control with one setting matched at a time (N1) |
-| E8 | Auxiliary state targets (event timing, future i0 moves) improve the shared representation | Never trained. Auxiliary-input tests (D11) are a different thing. | Open | N4 |
-| E9 | An output-update gate (hold or revise the last prediction) helps | Proposed 21 Oct, motivated by B2. Untested. | Open | N5 |
-
-### F. Regimes and where the score is
-
-| ID | Hypothesis | Evidence | Verdict | Next |
-| --- | --- | --- | --- | --- |
-| F1 | Model accuracy differs by regime | R0 pair: trending 0.81 against chop 0.39–0.43; quiet 0.41 against busy 0.76; volatility fifths 0.52, 0.71, 0.61. Descriptive, not causal. | Supported | — |
-| F2 | Feature–target associations vary across sequences and states | One p0 EWMA residual: r from 0.012 to 0.302 across 16 sequences; some conditional correlations change sign. Predicting when they change has not been shown. | Supported | — |
-| F3 | Explicit regime adaptation improves WP | Interaction test 0.545348 to 0.544998 (t0 up, t1 down); state interactions no gain; FiLM's regime signal hurt (E3); experts worse (E4). | No gain | Revisit only if per-bucket calibration slopes differ on a competitive base |
-| F4 | Rescaling by volatility recovers the per-sequence scale | Feasible proxy +0.0007; true volatility buckets +0.003; per-sequence scale oracle 0.671. Scale tracks how predictable a sequence is more than how volatile. | Rejected | Online self-calibration is the remaining route (N11) |
-| F5 | The heaviest sequences carry the score | Top fifth by scored-row count: 44% of metric weight at WP 0.576, against 0.70–0.75 for the other fifths. | Supported | Profile them (N10) |
-
-## Corrections log
-
-Nineteen claims have been walked back so far; most overstated what the encoded book can tell us. Newest first.
-
-| Date | Original claim | Correction | Consequence |
+| Evidence | Population | Result | What it establishes |
 | --- | --- | --- | --- |
-| 21 Oct | Seed noise is 0.0006, so a 0.001 change is real | That was R0 at the kit defaults. The v7 laptop runs differ by 0.003–0.007 between seeds | Two-seed ensembles and paired intervals at minimum; re-measure the ratchet threshold at the settings in use |
-| 21 Oct | FiLM gives the model regime adaptation | Its constant-context control matched it; the changing regime signal cost −0.0031 | E3 Rejected as built; defer FiLM |
-| 21 Oct | Scoring follows i1 because the targets move with i1 | i1's link to the mask is established. The targets change only on i0 price rows. i1 leading i0 is untested | Test lead-lag on GRU residuals before building on it (N3) |
-| 21 Oct | Volatility has little effect | Volatility features gave no reliable gain, but WP differs a lot by volatility bucket (0.457 against 0.683) | Treat volatility as untested in better forms, not as irrelevant |
-| 21 Oct | t0 and t1 swap identities in some states | Their relative strength reverses; the identities have not been shown to swap | Keep fixed outputs, no swap rule (B10) |
-| 21 Oct | A column such as p3 changing means a level cleared or a queue moved | Rank swaps fit several mechanisms; no trade, cancel or queue meaning is established | Name features by what they measure (rank flip), not by mechanism |
-| 17 Oct | The 12 selected EWMAs are 12 prices with one EWMA each | Earlier lab: span-100 and span-256 residuals of 6 prices plus v15; 12 of 22 prices never had one. v7: all 22 screened at half-lives 8, 32, 128 and 512 rows, 12 kept with one horizon each | Multi-horizon residuals per price remain untested in the kit (N7) |
-| 17 Oct | Normal-quantile medians (r 0.999) prove one shared transform | They do not. Sorting is a useful representation, not a decode | Add sorted features beside the raw columns, never instead without an ablation |
-| 17 Oct | The schema's bid/ask split is rejected | The schema's sides stand; the crossing shows values cannot be compared across columns | A2 to Inconclusive |
-| 17 Oct | p0 is not the touch level | Per-column transforms mean raw position cannot settle it | A5 to Inconclusive |
-| 17 Oct | Prices are not discrete | A continuous transform can remove exact repeats | A3 to Inconclusive |
-| 17 Oct | The k + 1 event signature is predictive | It uses an event not yet seen at prediction time | Diagnostic only; live features use past events |
-| 17 Oct | An upward encoded slope means buy | Encoded coordinates can move without an executable price rise | Test slope against both targets on held-out sequences |
-| 17 Oct | Rolling correlations with the targets can be features | Targets are unavailable at inference | Use input–input correlations only |
-| 17 Oct | +0.04 on the heaviest fifth adds +0.018 overall | Pooled WP is not additive by bucket | Recompute global weighted moments from the candidate's predictions |
-| 17 Oct | t0 + t1 < 0 on 87% of rows means the cost is always paid | The other 13% may be zeros rather than positives | Report negative, zero and positive shares before any sign constraint (B4) |
-| 17 Oct | The auxiliary-input tests covered auxiliary targets | Different things; no auxiliary-target head has been trained | E8 stays Open |
-| 17 Oct | The oracle scores (0.671, 0.695) are attainable gains | They use labels unavailable at inference | Ceilings only, not expected gains |
-| 17 Oct | Overlapping rows give independent tests | Rows are autocorrelated and features were screened many times | Resample whole sequences, fix shortlists, keep confirmation untouched |
+| v7 event/flow comparison | 420 screening sequences, 797,169 scored rows; two seeds | Event mean-run ΔWP -0.000593 [-0.004094, +0.003822]; flow +0.002739 [-0.000854, +0.006921] | Neither is a demonstrated ensemble win. Flow seeds disagree. |
+| Book lab: Ridge family tests | 48 TRAIN, 100 validation sequences | Base 0.5389; ladder 0.5448; events 0.5555 | Some families help a simpler model. |
+| Book lab: frozen-GRU stacking | Same 100 validation sequences, sequence cross-fitting | GRU-only about 0.6674; per-column family about +0.0005 and events about +0.0004, both intervals crossing zero | Linear family gains largely fail to add to this GRU. |
+| v3 Ridge study | 64 TRAIN / 64 dev; another 64 reserved within this plan | i0 control 0.566015; full control 0.569622; events 0.570452 | Events/full inputs have higher point scores, with inconclusive contrasts versus i0 control. |
+| v3 state interactions | Same 64 dev sequences | Interactions − additive state: -0.003150 [-0.007383, +0.000474] | No supported adaptive-weight benefit. |
+| v3 frozen-GRU correction | Only **5 of 64** planned dev sequences had complete cached predictions | Raw 0.489361; all correction families lower | Coverage is too limited for a general conclusion or broad confirmation. |
+| Expanded lab: Ridge | 32 TRAIN / 16 dev | Full 0.495236; i0-only 0.549176; full+volatility 0.513908 | Pilot evidence; the volatility addition is positive here but not a production GRU result. |
+| Expanded lab: GRU | Small pilot, two intended seeds, eight intended epochs | Several fits are recorded; the saved cell ends during book seed 1, epoch 3 | Treat as partial. There is no completed suite/ensemble table in the saved output. |
+| Old packaged-reference confirmation | Different local confirmation population; size not recorded here | WP 0.679120; t0 0.680711, t1 0.677530 | Challenger was the unchanged reference. Zero difference demonstrates no new gain. |
 
-## Feature map
+The expanded pilot's epoch-to-epoch scores also vary substantially. Audit its optimisation, state handling and fixed-epoch results before extending it. Do not select the best displayed epoch on the screening set after the fact.
 
-Three feature ideas have GRU results at scale (event, flow, FiLM regime context) and none cleared zero; scored fine-tuning is the only addition that did. Kit = the v7/v8 training kit (361 slots in next mode); lab = the 17 Oct book-features lab. The ask column refers to the six numbered feature requests in the write-up.
+The v3 plan is disjoint internally. Its own note says earlier use and base-GRU validation exposure are unknown. “Reserved by this notebook” therefore does not certify a historically untouched holdout.
 
-| Idea | Ask | Kit features (slots) | Lab features | GRU result | Register |
-| --- | --- | --- | --- | --- | --- |
-| Distance from a recent level (reversion) | 1 | ewma: 12 residuals, one horizon each (225–236) | ewm (401): 22 raw prices, 22 sorted levels and 5 summaries × spans 8–1,024; crossovers | In every v7/v8 model; never ablated alone | D1 |
-| Busy against quiet, trend against chop | 2 | activity (8: 237–244); legacy regime (91) | activity (96: 4–1,024 rows) | Activity in every model; regime block never run | D9 |
-| Event clock, persistence, flicker | 2 | event (40: 245–284) | events (66), cross (25), focus (78: p0, p3, p7, p17, p10, p20) | −0.0006 \[−0.0041, +0.0038\] | D5 |
-| Volume and trade-column flow | — | flow (36: 285–320) | — | +0.0027 \[−0.0009, +0.0069\]; seeds disagree | D6 |
-| Whole-book shape, best levels, gap | 3 | shape (26: 335–360) | ladder (83: three best-level rules, gaps, ranks, carried volumes) | Not run | D7 |
-| Sequence-level context | — | context (14: 321–334) | — | Not run | D8 |
-| Book trend and slope (buy or sell pressure) | 4 | legacy trend (224: drift, KAMA distance) | trend (80: OLS slope 12–1,024 rows), percol (198) | Not run | Open |
-| Chunkiness (spread of levels and changes) | 5 | — | chunk (88: level and change std, cross-sectional std, 12–1,024 rows) | Not run | Open |
-| Rolling correlations, regime-dependent importance | 6 | FiLM regime context | rcorr (21: side against side, i0 against i1, price against volume) | FiLM regime signal −0.0031 | E3 |
-| Cross-instrument lead-lag and relative value | — | Raw i1 inputs and changes (52–103, 164–215) | — | Never ablated at scale; the pilot favoured masking i1 | D12 |
-| Scoring-mask awareness | — | Scored fine-tune (direct mask) | Mask proxy model | Fine-tune +0.0005 to +0.0008; proxy AUC 0.584 | C3, C4 |
+## 6. What the targets and book appear to do
 
-The event and flow descriptors are i0-only. No i1 event features exist yet, so the lead-lag idea has no dedicated features to test.
+### Numerical structure
 
-## Open ideas and backlog
+The price-like columns have a stable approximate numerical median order in the decoder samples. About 67% of held-out rows follow that full order; some pairs cross frequently. Many columns change together. These are useful observations about the encoded representation.
 
-The four Now items are notebooks or single matched runs; none needs new architecture. Sorted by priority.
+They do not recover physical touch, monetary spread, tick size, volume units, order clearance or queue inheritance. In particular, sorting across all 22 encoded values cannot override documented bid/ask membership. A rank change of an encoded component is not the position of an individual order in a price-time queue.
 
-| ID | Idea | Why | Cost | Priority |
-| --- | --- | --- | --- | --- |
-| N1 | Match the reference's training settings (data size, sequences per step, chunk length), one setting at a time | E7: the 0.02 gap dwarfs every architecture effect measured so far | Desktop runs, no new code | Now |
-| N2 | Test whether the mask favours rows where t0 or t1 change | C5; decides whether to weight training toward update rows | Notebook, no training | Now |
-| N3 | i1's role: an i1-masked ablation at matched settings, plus a test of whether recent i1 history predicts GRU errors after conditioning on i0 history | D12's pilot and C2's mask enrichment pull opposite ways | Notebook plus two runs | Now |
-| N10 | Profile the heaviest sequences: i1-only row share, i0 event rate, volatility, efficiency ratio | F5: 44% of the weight at WP 0.576 | Notebook | Now |
-| N4 | Auxiliary training heads: P(next i0 price event within 1, 4, 16, 64 rows); future moves of a few train-fitted i0 price factors at 4, 16, 64 rows; optionally t0 + t1. Keep the direct path to t0 and t1 | B2, B8; the target is flat 97% of the time, so its gradient is sparse | Training only; dropped at inference | Next |
-| N5 | Output-update gate: ŷt = (1 − g)·ŷt−1 + g·bt, one gate each for t0 and t1, recurrent state still updated every row | B2: between i0 events the target is constant | Small; tiny inference cost | Next |
-| N7 | Multi-horizon EWMA residuals per price in the kit | D1; write-up ask 1 | Small | Next |
-| N8 | Shape and context blocks in matched two-seed runs | D7, D8 | Two runs each | Next |
-| N12 | Full-history training: carry recurrent state from step 0 instead of a zero-state warm-up | Slow units never learn sequence context; may feed E7 | Code change | Next |
-| N6 | Zero-initialised causal TCN correction after the GRU (16 channels, 31 rows) | Short lead-lag patterns a GRU blurs | Live compute | Later |
-| N9 | Per-target blend weights, fitted on dev, frozen, then confirmed | Additions often help one target and hurt the other | Small | Later |
-| N11 | Hindsight reconstruction feeding online self-calibration | F4: scale oracle 0.671, volatility explains little | Go/no-go first: build if reconstruction corr ≥ 0.9, drop if < 0.7 | Later |
-| N13 | Distil a larger ensemble into one model | Seed averaging gave +0.0019 | Teachers trained offline | Later |
-| N14 | GRU plus compiled GBDT blend | Different model families blend better than seeds | Medium | Later |
-| N15 | Inference speed: fp16 weights, skip the head when no prediction is needed | 75.7 µs per row leaves about 10 minutes of the 60 | Medium | Later |
-| N16 | FiLM, row TCN, more seeds of heads or flow | E2, E3: no gain so far | — | Deferred |
+Suffix pairing tests were not decisive. Their failure does not disprove the documented price/volume grouping or identify a new pairing. A lag such as previous v17 predicting current v14 remains a numerical association until its physical interpretation is independently established.
 
-## Evidence standard
+### Target structure
 
-A change is promoted only when a two-seed ensemble beats its matched control on the same sequences with an interval above zero.
+t0 and t1 are strongly related, with opposing and shared components. The often-negative sum is compatible with a long/short edge interpretation, but does not identify it. The earlier “negative on about 87% of rows” statistic leaves zeros and positive sums unresolved in the remainder. Do not force a nonnegative cost or swap target identities by regime.
 
-1. Same partition, paired by sequence, with a whole-sequence bootstrap of pooled WP.
-2. Two seeds per arm, compared as ensembles. At the laptop settings a single seed swings by up to 0.007.
-3. Both targets reported. A change that helps one and hurts the other is not a win until a per-target blend says otherwise.
-4. An interval spanning zero is inconclusive, not a small win.
-5. Regime buckets compared within one report only; bucket gains do not add up to the pooled score.
-6. A feature family earns a kit run when base + family clears zero in the ridge test and GRU + family clears zero in the stacking test.
-7. One frozen confirmation per candidate, on sequences never used for selection.
-8. Before upload: a full callback benchmark with the projected time comfortably under 60 minutes.
+High autocorrelation does not identify an exact 100–200-row target construction. Likewise, flatness is population dependent: one earlier sequence had roughly 97% flat rows, while broader studies show roughly 10–11% update rates under their own definitions.
 
-## Next steps
+Some target-change diagnostics align closely with i0 price events. That does not imply the estimate should stay fixed between events. i1 inputs can revise beliefs about an unchanged hidden target.
 
-Explain the 0.02 gap before any new architecture: until the base matches the reference, every comparison is made on a handicapped model.
+### Lead–lag and reversal evidence already available
 
-- [ ] Write the reference's exact training settings next to v7, v8.1 and v8.2: sequences, epochs, sequences per step, chunk length, window, burn-in, feature blocks.
-- [ ] On the desktop, retrain the v8.2 control with one setting moved toward the reference: first sequences per step and chunk length (the laptop's memory limit), then data size. Two seeds, focus screen (N1).
-- [ ] Notebook: does the mask favour rows where t0 or t1 change (N2)?
-- [ ] Notebook: profile the heaviest sequences (N10) and test i1 lead-lag on GRU residuals (N3).
-- [ ] Read the book-features lab results; promote at most one or two families (D16).
-- [ ] On a competitive base only: auxiliary heads (N4), then the output gate (N5), each against a matched control.
-- [ ] Package the v8.1 base + scored fine-tune and benchmark the full callback before uploading.
+The v3 notebook directly tested the illustrative i1_p6 lead of three rows. Correlations with subsequent target changes were **-0.00045 for t0 and +0.00078 for t1**, with intervals spanning zero and circular-shift max-statistic p=1. This particular example is unsupported in that sample.
 
-## Adding an entry
+Several i0 four-row lag associations were larger. For example, i0_p7 change versus later t1 change was about 0.24972, but its relationship with the future target **level** was only about 0.02374. Co-changing columns, event flicker and own-history controls still matter. This is not yet evidence of a usable residual forecast.
 
-One result usually touches three places: a run-log row, a register verdict, and sometimes a correction. Copy the matching row shape below into its table.
+The v3 exploratory reversal study found a matched low-encoded-volume difference of about **+9.84 percentage points** for one downward numerical-centre move rule over 50 rows, with a sequence interval [+2.32, +15.85] points. Many rules were searched. This is a candidate for frozen replication, not proof that low physical liquidity causes profitable reversion. Hitting the origin at any point within 50 rows also differs from ending beyond it at row 50.
+
+## 7. Active hypothesis register
+
+This is the decision-focused summary. Keep the existing 120-question register as supporting detail. Record a new run beneath the same ID rather than replacing its history.
+
+| ID | Claim / interpretation | Current evidence | Status and next decision |
+| --- | --- | --- | --- |
+| H001–H015 | Numerical ordering decodes physical depth, queue identity or volume transfer | Stable approximate order; crossings; lag associations; no independently decoded units/queues | Mechanism unresolved. Use numerical descriptors with identities retained. |
+| H016–H021 | t0/t1 are long/short edges with a simple cost formula | Anticorrelation and often-negative sums; gap-only sum R² around 0.03, broader state around 0.25 | Interpretation open. Keep unconstrained t0/t1 outputs. |
+| H022–H023 | Target updates align with i0 price updates; a universal flatness rate exists | Strong alignment in examined samples; flatness rates differ by population | Alignment observed; universal rate unestablished. |
+| H024–H026 | i1 price events identify scored rows well enough for proxy-weighted training | Mask enrichment observed; AUC 0.584, AP 0.138 versus prevalence 0.108 on 24 held-out calibration sequences | Weak proxy. Defer long proxy-weighted training. |
+| H027 | Direct-mask head fine-tuning improves the strongest base | +0.000802 on common focus screen, interval above zero | Supported in that comparison. Preserve the candidate and replicate on declared data. |
+| H028–H029 | Current target changes attract scoring; flat targets carry negligible weight | Returned 32-sequence summary contradicts both; flat rows carry about 92.9% of absolute-target weight | Against these claims in that sample. Do not discard stable periods. |
+| H032–H033 | Particular i1/auxiliary groups help the competitive GRU | Small pilots sometimes favour i0-only; v3 Ridge full control has a positive but inconclusive delta; complete matched production ablations absent | Unresolved. Retrieve/repeat matched group removals. |
+| H034–H041 | More smoothers, slopes or volatility features improve WP | Mixed small-model results; broad EWMA/volatility additions do not show a stable GRU gain | Inconclusive. Audit actual selected schema; test compact blocks. |
+| H042–H045 | Correlation, rank and shape descriptors improve the model | Conditional associations vary; broad stacking results are mostly flat or negative | Descriptive support; predictive gain unestablished. |
+| H047–H050 | Event/flow/delay features add beyond the GRU | v7 intervals span zero; event stacking has only a small uncertain gain | Inconclusive. Require competitive-base residual evidence. |
+| H051, H057–H058 | i1 leads the relevant i0 state/target errors | Specific i1_p6 lag-3 test near zero; simple i1 Ridge corrections failed in returned summary | Against those probes; wider conditional nonlinear hypothesis remains open. |
+| H053–H055 | Two clocks and observed flicker matter | Different event rates and reversals observed | Descriptive. Test row filters beside event filters, without freezing predictions. |
+| H056 | An event can be called persistent using its next two events | Those events have not arrived at the original row | Not causal as a current input. Delayed confirmation or training-only label is possible. |
+| H059–H063, H067 | State-dependent effects justify adaptive heads or HMMs | Conditional differences; interaction tests fail to improve; varying FiLM loses to constant context | Useful adaptation unproven. Test compact context and capacity controls first. |
+| H064–H066 | Blips, low encoded volume and direction predict useful reversals | v3 exploratory matched reversal differences; reversion Ridge variant itself loses | Descriptive candidates exist; target/residual benefit open. |
+| H069–H072 | More target heads or a constrained direction/cost decoder improve WP | No repeatable independent-head win; deriving t1 from t0 plus gap underperforms | Defer. The gap label adds no independent information if it is t0+t1. |
+| H073–H079 | Future-state auxiliary supervision helps the shared representation | Future-state diagnostics exist; no completed matched auxiliary-head gain | Open. Test timing plus movement, with direct t0/t1 supervision dominant. |
+| H080–H084 | A TCN/LSTM/other recurrence is better | Earlier small row-TCN pilot did not improve; event/post-GRU TCN and alternatives lack adequate results | Defer architecture search until a specific remaining error motivates it. |
+| H085–H087 | Holding, smoothing or learned update gates improve estimates | Hard holding and two fixed smoothers hurt; learned gate not tested | Against fixed rules. Learned gate is distinct but lower priority. |
+| H088–H090, H110 | Data size or memory settings explain newer-model weakness | 5k run changes heads, flow and checkpointing; original strong training settings incompletely recorded | Confounded. Recover the exact base recipe and a controlled learning curve. |
+| H091–H095, H113 | Ensembles, metric-aware losses or selection improve WP | Historical two-seed gain; successful mask fine-tuning; several objective changes unproven | Preserve known gains; test one training/selection change at a time. |
+| H096–H100 | Causal context recovers useful sequence effects | Target-based mean/scale oracles are strong; feasible volatility proxy much smaller | Oracle does not establish feasibility. Test prefix-only descriptors with shrinkage. |
+| H101–H106, H118–H120 | Distillation, model diversity, faster inference or larger encoders help | Proposals/supporting implementations, without a returned final score improvement | Open. Evaluate quality together with complete callback cost. |
+
+The returned 32/16-sequence holding/correction numbers are available here through `RESULTS_INTERPRETATION.md` and the register's account of `RESULTS.json`. The raw `RESULTS.json` is not among these fifteen attachments, so those figures have not been independently recomputed in this revision.
+
+## 8. Feature map: idea, measurement, result
+
+The supplied catalogue describes **available slots**, not which features every run used. Base mode has 225 features: 112 levels, 112 differences and time. Next mode has 361 slots; its 12 EWMA, 8 activity, 40 event, 36 flow, 14 context and 26 shape slots can be disabled. In the recorded v7 control only **225/361** were active. Do not describe all base models as already using EWMAs/activity.
+
+| Research idea | Candidate measurement | What has actually happened | Design implication |
+| --- | --- | --- | --- |
+| Recent equilibrium / mean reversion | x minus past EWMA at several decays | Mixed research results; historical shortlists differ from kit schemas | Inspect names and whether settings are spans or half-lives. |
+| Short pattern versus long state | Row- and event-clock filters; signed changes and ages | Timing/event blocks tested, without a repeatable production win | Keep small; match the same base. |
+| Whole-vector movement | TRAIN-fitted common factor, orthogonal residuals, coherence | Numerical co-change observed | A few factors may be better than hundreds of correlated columns. |
+| Shape and identity | Raw identities plus within-group ranks, quantiles and crossings | Shape/ladder probes exist; no verified physical ladder | Add a second view; do not replace documented sides. |
+| Drift versus chop | Causal slope, efficiency, sign persistence | Regime differences observed; interactions inconclusive | Forecast target residuals, not a trading story. |
+| Chunkiness | Level std, change RMS, jump concentration, sign-run lengths | Some Ridge gains; chunk stacking hurt | Separate these measurements rather than add a large undifferentiated block. |
+| Coupling changes | Rolling input-factor correlations and short/long covariance changes | Broad rcorr did not establish a GRU benefit | Use selected input-to-input relationships only. |
+| Breaks | Causal innovations and short/long state disagreement | Several generic detector versions hurt | New detectors need a specific remaining failure to address. |
+| i1 lead–lag | Past i1 changes, ages and unmatched moves conditional on i0 | Simple probes have not helped | No assumed fixed economic basis between anonymised columns. |
+| Learned future state | Training labels for timing, movement and uncertainty | Not established by auxiliary-input experiments | Auxiliary supervision is a separate experiment. |
+
+## 9. Twenty ranked improvement ideas
+
+The order prioritises decision value and compute discipline, not promised score increases. “Now” includes research and reproduction; it does not mean launch twenty training jobs.
+
+### 1. Reproduce the strongest base exactly — now
+
+**Question:** Can a fresh run recover the reference family under the same recipe?
+
+Record checkpoint and schema hashes, raw/engineered input widths, hidden width, active features, float16 rounding, scaling, data IDs, loss, optimiser/schedule, state/burn-in policy, chunking and checkpoint rule. Replay the existing model first, then reproduce its training. The newer 5k heads/flow recipe is not this control. If the original settings cannot be recovered, declare a new baseline rather than claim reproduction. H089, H110.
+
+### 2. Freeze one evaluation protocol and an exposure ledger — now
+
+**Question:** Is an apparent improvement robust outside the data used to invent it?
+
+Cache complete-sequence predictions with model/feature hashes and exact masks. Use declared research-fit, development and final confirmation roles. List historical exposure; do not claim old calibration rows are pristine. Resample complete sequences, recompute pooled clipped WP, report each target and compare actual seed ensembles. Sequence IDs are grouping identifiers, not a chronology. This protects every later decision. H109, H115.
+
+### 3. Preserve and replicate scored-row head fine-tuning — now
+
+**Question:** Does the small known gain survive another declared comparison?
+
+Start from the strongest parent and retain its successful head-only recipe. Compare original, equal-budget unweighted fine-tuning and direct-mask fine-tuning. Use only a declared calibration slice for fitting/selection; hold screening and confirmation labels out of the fine-tune. The official FAQ permits supplied train/valid data, but permission to train on it does not make it held out. Do not replace the useful direct mask with the weak proxy. H027, H095.
+
+### 4. Build a matched data learning curve — now, after the recipe audit
+
+**Question:** Is the same model still improving with sample diversity?
+
+Use nested 2,500 / 5,000 / full training-sequence sets with the same feature definition, architecture and selection rule. Report both epochs and optimiser steps/processed rows, since fixed epochs give larger datasets more work. A fixed-step comparison separately helps distinguish diversity from compute. If the newest model already uses all data, this is a diagnosis of scaling and schedule, not a recommendation simply to use all data again. H088–H090.
+
+### 5. Test memory length and stabilise optimisation — now
+
+**Question:** Are truncated history, batch changes or an aggressive schedule limiting the GRU?
+
+Inspect learning curves and state handling before increasing capacity. Isolate chunk/backpropagation length, effective batch and learning-rate schedule; carry prefix state causally and compare against the existing burn-in. Gradient accumulation changes optimiser batch size but does not restore a truncated gradient path. Benchmark one context change at a time. Do not assume laptop settings explain the entire 0.0186 deficit. H090, H097, H110.
+
+### 6. Complete input-group ablations on the competitive base — next
+
+**Question:** Which i1 and auxiliary groups have nonlinear incremental value?
+
+Compare full input, i0-only and i0+auxiliary, then selectively remove i1 prices, volume-like or trade-like groups. Resolve derived-feature dependencies so a supposedly removed group cannot remain through engineered inputs. Fix data, scaler policy, training schedule and seed set. Small Ridge/raw-input pilots cannot decide production GRU redundancy. H032–H033.
+
+### 7. Add a compact multi-horizon equilibrium block — next
+
+**Question:** Does explicit memory improve what the GRU already remembers?
+
+For a few TRAIN-selected columns/factors, compare current-minus-EWMA and short/long filter disagreement at a small fixed set such as half-lives 8, 32, 128 and 512 rows. Use multiple decays per selected stream before expanding every component. Keep the raw values. Validate against the existing actual schema: earlier labs already covered more components/horizons than “twelve prices, one each.” H034–H035, H041.
+
+### 8. Represent both elapsed rows and elapsed events — next
+
+**Question:** Does the same pattern behave differently in quiet and burst periods?
+
+Compute row-based and observed-event-based filters together, plus event age, recent signed event rate and event/row speed ratio. Only update an event filter on an event already seen. Compare a small descriptor block first; an event-only GRU is a later architecture option. The ordinary recurrent state and predictions must still be allowed to use intervening information. H053–H056.
+
+### 9. Search for conditional lead–lag in GRU errors — next research priority
+
+**Question:** Does recent i1 or i0 history add information after own-book history and the strong GRU prediction?
+
+Preselect a small set of lags in rows and i0 events. Fit on TRAIN/out-of-sample predictions, include i0 co-change/common-factor controls, then check separate sequences. Test current target residuals as well as future encoded-factor movement. Include negative-lag and shifted-signal controls. The specific i1_p6/three-row example failed; broad repetitive scans need multiplicity control. H050–H051, H057–H058.
+
+### 10. Freeze a small blip/reversion study — next research priority
+
+**Question:** Do move size and recent activity change reversal probability, and does this help t0/t1?
+
+Replicate at most two or three existing v3 rules, conditioning on starting level, move magnitude, own-history, encoded-volume state and overlap/event support. Distinguish “touched the origin within 50 rows” from endpoint displacement. Forecast reversal from present features and test whether that forecast corrects GRU errors. An event can be confirmed persistent only after the confirming observations arrive. H064–H066.
+
+### 11. Measure joint dynamics rather than add every rolling column — next
+
+**Question:** Is there an emergent collective state that single-column filters miss?
+
+Fit a small input-only factor basis on TRAIN. Keep common motion, orthogonal shape residuals, co-change breadth, coherence and short/long factor-covariance differences. Cross these with activity or persistence only when a declared probe supports it. This gives “emergent behaviour” a measurable definition without asserting a physical book decode. Compare an equally sized ordinary feature block as a control. H014, H040, H042, H067.
+
+### 12. Preserve identities while testing an additional shape view — next
+
+**Question:** Can shape/rank features help without discarding fixed component information?
+
+Combine raw columns with within-documented-side numerical quantiles, TRAIN-normalised residuals, crossings and change in rank. Fit every normalisation on TRAIN and retain raw values; normalising columns does not recover physical units. Compare raw versus raw+shape, not just raw versus globally sorted. Use a compact feature block before a set encoder or attention layer. H003–H005, H043–H045.
+
+### 13. Retest regime/break context with strict controls — conditional
+
+**Question:** Can a small causal context explain repeatable residual calibration differences?
+
+Start with continuous activity, efficiency, short/long volatility, reversal frequency and input-factor coupling. Compare unchanged base, context-added model, same-capacity constant context, and time/sequence-shuffled-context diagnostic. Shrink conditioning towards identity and keep feature count low. An HMM would require TRAIN fitting and causal filtered state probabilities, not full-sequence smoothed states. FiLM and generic break detectors have already failed in tested forms. H059–H063, H119.
+
+### 14. Learn prefix context with uncertainty and shrinkage — conditional
+
+**Question:** Can past inputs identify useful sequence-specific behaviour?
+
+Add expanding or slowly decaying input summaries with history length/counts. Optionally compare nearest TRAIN prefixes at the same available horizon; exclude the same sequence and never use a future/full-sequence summary. Shrink noisy mean/scale corrections toward the global model. Target-based sequence oracles justify investigation but do not forecast an attainable score. H096–H100.
+
+### 15. Use training-only future-state auxiliary tasks — conditional, first new neural idea
+
+**Question:** Can explicit supervision improve the shared GRU representation?
+
+Keep the direct t0/t1 output path. Add a small loss for future TRAIN-fitted i0-factor displacement at 4/16/64 rows, with event-within-horizon labels as a separate timing task. Handle end-of-sequence censoring and normalise auxiliary loss scales on TRAIN. Test movement, timing and then their combination. Drop auxiliary readouts at inference if the main prediction does not use them. These heads differ from merely splitting the two main target heads. H073–H079.
+
+### 16. Add a short causal residual TCN only if a pattern remains — later
+
+**Question:** Are useful short patterns left after the GRU prediction?
+
+Use a frozen competitive GRU and train a small residual branch with a zero-initialised final layer. Inputs can include past/current predictions, compressed hidden state, observed changes and event ages. Try a modest receptive field such as 15–31 rows, with an equal-capacity non-temporal control. Train corrections from valid out-of-sample base predictions, or assess a jointly trained system on separate sequences. A historical parallel row-TCN failure is not the same experiment, but lowers its priority. H080–H082.
+
+### 17. Tune the objective, checkpoint rule and clipping separately — conditional
+
+**Question:** Is the model optimised and selected for the rows and moments that matter?
+
+Audit the existing absolute-clipped-target weighted loss; compare calibration-dev checkpointing on the official mask with the current rule while holding fitted trajectories fixed where possible. Test a small output clipping/scale setting on development data only. Add a correlation term only as a controlled follow-up: earlier hybrid-loss pilots did not improve, and minibatch correlation is not global WP. Avoid using true scoring weights or labels as live inputs. H093–H095, H112–H113.
+
+### 18. Train one small complementary tabular model — later
+
+**Question:** Does another model family make sufficiently different useful errors?
+
+Fit a constrained GBDT or small MLP on causal compact features; optionally use out-of-sample GRU summaries. Assess a frozen blend, not model diversity by name. Optiver, G-Research and MITSUI support investigating feature quality and complementary learners; they do not establish the same winning recipe here. A weak standalone model may help a blend, but every feature and learner adds callback cost. H102.
+
+### 19. Choose target-specific blends from actual predictions — later, cheap once cached
+
+**Question:** Can one candidate help t0 while another helps t1?
+
+Choose one restrained blend coefficient per target on development predictions, shrink toward the reference and freeze before confirmation. Compare seed averaging, a few complementary checkpoints and the candidate only if their residual diversity is useful. Recompute global WP after blending/clipping; do not combine bucket improvements arithmetically. Existing reports with candidate share zero do not establish a new blend gain. H091–H092.
+
+### 20. Spend runtime deliberately; distil if needed — later
+
+**Question:** Can a better model fit the complete submission budget?
+
+Benchmark feature construction, state updates and all ensemble members on one core before scaling the architecture. Then test compilation or quantisation with numerical/callback parity, or distil a stronger frozen teacher ensemble into one student. Distillation should use TRAIN or declared fitting data, not confirmation labels. The reported 75.7 μs/row and projected 49.8 minutes are local estimates; adding a TCN/GBDT cannot be treated as free. H101, H105–H106.
+
+## 10. What transfers from the nine distinct competitions
+
+The repeated links in the request reduce to nine competitions. Leaderboards show outcomes, not why a technique worked. The table separates retrieved primary evidence from **our proposed adaptation**. Several direct Kaggle pages returned no extractable body; indexed author text and linked original code were used where available. The PKSHA write-up body could not be verified, so no detailed PKSHA architecture claim is made here.
+
+| Competition | Primary evidence reviewed | Proposed Connectome adaptation | Boundary on transfer |
+| --- | --- | --- | --- |
+| Optiver Realized Volatility Prediction | Winner's nearest-neighbour write-up listing; seventh-place author's account of reconstructing time order [S3–S4] | TRAIN-only neighbours/collective context can be tested as input representations. | Do not assume sequence IDs are chronological or import a reconstruction trick that requires unavailable data. PKSHA method details remain unverified. |
+| Optiver Trading at the Close | HYD reports CatBoost/GRU/Transformer weights 0.5/0.3/0.2; ADAM reports three seeded XGBoost models with 157 features and provides code [S5–S6] | Test one complementary learner and compact aggregations beside the GRU. | Cross-stock zero-sum constraints, exact weights and online retraining require their original semantics/label availability. |
+| Jane Street Market Prediction | Yirun's first-place supervised-autoencoder/MLP discussion includes Gaussian-noise regularisation [S7] | Training-only auxiliary supervision or carefully tested denoising may help representation learning. | An autoencoder is not evidence that a semantic state bottleneck will improve this task. |
+| MITSUI Commodity Prediction Challenge | ZLF's fifth-place account combines a conservative four-day-window RNN with a single-day MLP [S8] | Investigate slow recurrent context plus a complementary fast mapping. | No day/horizon equivalence between that problem and Connectome's anonymous rows. |
+| Jane Street Real-Time Market Data Forecasting | Original API-use discussions describe explicitly supplied lagged responders [S9] | Audit exactly what labels and history the live callback receives. | Connectome does not provide true lagged targets. That online adaptation path cannot simply be copied. |
+| G-Research Crypto Forecasting | Second-place author describes guided feature engineering, a single LightGBM learner and Numba feature generation [S10] | Compact residual-driven features and a fast tabular challenger are credible experiments. | It does not show that stacking more neural architectures is necessary. |
+| Two Sigma Financial Modeling | Official fifth-place interview discusses lag/aggregate features, volatile versus calm periods and runtime-limited ensembles [S11] | Test input-derived collective context and stability across states. | Do not reproduce target-history rules without labels that genuinely arrive online. |
+| Ubiquant Market Prediction | First-place authors describe LightGBM/TabNet, grouped features and limiting training to reduce overfitting [S12] | Compare compact aggregate representations and control training/selection exposure. | Full test-time cross-sectional aggregates are not available in a row-stream unless that information has arrived. |
+| Two Sigma: Using News to Predict Stock Movements | Official task/data describe market plus news inputs and signed confidence over market-adjusted returns [S13] | Align every source to its availability time and test each family's incremental value. | No news/text stream is present here; NLP and that competition's confidence objective are not direct additions. |
+
+The useful common thread is representation, validation, controlled complexity and measured complementarity. Our next-step choices come primarily from the Connectome results, with these competitions supplying candidate methods.
+
+## 11. A bounded notebook pass before long training
+
+Extend the existing v3 workflow rather than create another broad feature catalogue. Start with its existing 24 TRAIN / 32 diagnostic-sequence scale; increase only to resolve a declared uncertainty. Those historical calibration sequences are exploratory, not final confirmation.
+
+| Panel | Question and output | Decision it supports |
+| --- | --- | --- |
+| 1. Run/coverage audit | Compare reference/current manifests; verify exact row keys, model hashes, feature order and masks. Resolve the v3 5/64 complete-GRU-cache coverage. | Decide whether the comparison is valid before reading feature rankings. |
+| 2. Population profile | Recompute target-change rates with explicit clipping/tolerances, mask cross-tabs, target-weight shares and causal activity/efficiency profiles. | Resolve contradictory flatness claims; locate weak high-support populations. |
+| 3. Residual lead–lag | Fit a predeclared small lag bank on out-of-sample predictions, conditioning on i0 history/common motion; compare both clocks and shifted controls. | Promote a causal lag block only if it adds stable held-sequence information. |
+| 4. Frozen reversal rules | Replicate two or three v3 rules with support, overlap and own-history controls; report hit-within-window and endpoint labels separately. | Decide whether reversal supervision/features deserve a neural test. |
+| 5. Joint state/calibration | Test compact factor/coherence and short/long-context descriptors against constant/capacity controls. Fit corrections only on research-fit rows. | Decide whether regime adaptation has a specific measurable residual to address. |
+| 6. Frozen shortlist | Record at most two candidate families, schemas, lags, thresholds, fitting IDs and the exact next comparison. | Prevent the next desktop run from mixing unrelated changes. |
+
+Strong univariate correlation is insufficient. A stable out-of-sample residual correction is a useful triage signal, but failure of a linear correction does not prove that a representation cannot help joint GRU training. Permit one bounded, predeclared neural representation test when there is a clear reason; do not require every nonlinear idea to pass a Ridge filter first.
+
+Training order after the notebook pass:
+
+1. Replay and recover the strongest shared-base recipe. Resolve the reproduction/configuration gap.
+2. Establish the controlled full-data baseline and preserve the successful scored-head fine-tune.
+3. Test one compact feature/context winner against that base with matched data and seeds.
+4. If supported, test training-only movement auxiliaries separately. Timing is another arm, not bundled into the first comparison.
+5. Only then consider the residual TCN or a complementary learner.
+6. Freeze a selected candidate/blend, confirm once on a declared holdout, and benchmark the complete callback before packaging.
+
+This is an experiment sequence, not a prediction that twenty changes will close a particular leaderboard gap.
+
+## 12. Corrections that should remain visible
+
+| Earlier statement | Corrected statement | Consequence |
+| --- | --- | --- |
+| “t0 and t1 are buy and sell execution edges.” | Compatible working interpretation; exact formulas remain unknown. | No hard cost sign or target-swap rule. |
+| “The schema's bid/ask split is wrong because the encoded book crosses.” | Numerical comparability/depth is unresolved; documented side membership remains the specification. | Do not replace documented sides with a global numeric split. |
+| “Rank crossings prove changing order-queue position.” | They show encoded numerical crossings. | Retain identity; use neutral feature names. |
+| “Failed suffix matching disproves p/v pairing.” | The correlation-based test was not decisive under anonymisation. | Do not assert a recovered volume ladder. |
+| “Targets are flat on 97% of all rows.” | That was population/definition dependent; broader samples differ. | Record sample, tolerance and clipping with every rate. |
+| “Flat true targets justify fixed predictions.” | An unchanged hidden value may still have a changing conditional estimate. | Tested hard holding and smoothing hurt. |
+| “Scoring follows target changes.” | Current-update enrichment was contradicted in the returned sample; i1 mask enrichment is a different observation. | Separate mask, target update and useful prediction revision. |
+| “Weak volatility additions mean volatility has little effect.” | A tested addition may be redundant, noisy or poorly represented. | Assess conditional structure and incremental value separately. |
+| “FiLM's extra layer proves useful regime adaptation.” | Changing context lost to constant context. | Attribute no gain to regime information. |
+| “The 5k run disproves scaling.” | It used a different heads/flow recipe and selection settings. | Run a controlled learning curve if needed. |
+| “TCNs and independent heads have never been tried.” | Small/main-head variants exist; event/post-GRU variants are distinct and largely unproven. | State the exact architecture variant before proposing a rerun. |
+| “Twelve selected EWMAs means twelve prices at one horizon.” | Coverage differs by lab and resolved schema. | Record exact dependencies and decays. |
+| “A future non-reverting event is a current persistent event.” | Persistence can only be confirmed after the required delay. | Use delayed features or training-only labels. |
+| “Rolling target correlation can set live importance.” | True targets are unavailable at inference. | Use input-to-input features or offline diagnostics. |
+| “An interval above zero proves a universal gain.” | It is conditional evidence under a particular selection history and fitted seed set. | Replication and declared confirmation still matter. |
+| “An oracle WP of 0.671/0.695 is an achievable target.” | Target-based per-sequence calibration is unavailable online. | Treat it as a diagnostic, not a promised score. |
+| “Local 0.679 beats leaderboard 0.672.” | Different populations and model-selection histories. | Compare submissions on the competition's own test. |
+
+## 13. Templates for new work
+
+### Hypothesis entry
 
 ```markdown
-Run log:     | <run> | <candidate> − <control> | <partition, seqs> | Δt0 | Δt1 | ΔWP [low, high] | <register ID> |
-Register:    | <next free ID in its group> | <claim, stated so it can fail> | <test, partition, seeds, numbers> | <verdict> | <next test> |
-Correction:  | <date> | <claim as first stated> | <what the evidence supports> | <what changes: verdict, feature, plan> |
-Backlog:     | N<next> | <idea> | <register ID it answers> | <runs or notebook> | <priority> |
+### H<next free ID>. <One falsifiable claim>
+
+Date:
+Mechanism status: open / observed / unresolved / contradicted
+Predictive status: open / inconclusive / supported in comparison / against version
+Motivation:
+Observed evidence, with source file/cell:
+Competing explanations:
+Causal feature definition and source dependencies:
+TRAIN-only fitted quantities:
+Training/selection/confirmation sequence IDs and prior exposure:
+Control and exactly one changed element:
+Predicted result if the claim is useful:
+Result that would count against this version:
+Compute/runtime budget and stopping rule:
+Run IDs and configuration hashes:
+Actual t0, t1 and pooled masked WP:
+All-eligible WP, support and paired interval:
+Seed replication / actual ensemble definition:
+Decision and next test:
 ```
 
-State every hypothesis so that a result could prove it wrong. Record the seeds, partition and interval with every number.
+### Result row
 
+```markdown
+| Run ID / date | H-ID | Candidate and control | Partition / mask / exposure | Seqs / scored rows | Seeds / epochs / optimiser steps | t0 / t1 / WP | ΔWP / interval | Runtime | Decision |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+```
 
+### Correction row
 
+```markdown
+| Date | Previous wording | Evidence requiring correction | Narrower conclusion | Experiment/feature affected |
+| --- | --- | --- | --- | --- |
+| ... | ... | ... | ... | ... |
+```
 
+Archive original numbers and verdicts. Add a dated revision explaining the changed conclusion so a future experiment does not unknowingly repeat an already failed version.
+
+## 14. Evidence inventory and references
+
+### Supplied project evidence
+
+| Source | Use in this revision |
+| --- | --- |
+| `Connectome research log.md` | Earlier master summary; revised here where later evidence supersedes it. |
+| `HYPOTHESIS_REGISTER.md` | Stable H001–H120 IDs, provenance and later scope corrections. |
+| `RESULTS_INTERPRETATION.md` | Returned v8.3 mask/holding/smoothing/correction summary and model audit. |
+| `HYPOTHESES_TESTED.md` | Earlier 17 October register; physical-semantic and universal-flatness conclusions require correction. |
+| `Pasted text(7).txt` | Hypothesis audit distinguishing numerical structure from decoded semantics. |
+| `Pasted text (2)(3).txt` | 225/245/361-slot feature catalogue and preprocessing descriptions. |
+| `Pasted text (3).txt` | v7 commands, budgets, seeds and matched individual-run outputs. |
+| `Pasted text (4).txt` | State/auxiliary/TCN proposals; proposals are not completed experiments. |
+| `Pasted text (5).txt` | Actual common-screen regime ensembles and paired contrasts. |
+| `Pasted text (6).txt` | Actual common-screen larger heads/flow ensembles and paired contrasts. |
+| `Connectome_Book_Features_Lab(1).ipynb` | Saved outputs: cells 16/18 family Ridge and GRU stacking; 20 delay; 22 interactions. |
+| `Connectome_Book_Features_Lab_v3(1).ipynb` | Saved outputs: cells 10/14/18/21 for Ridge, lead–lag, reversal and limited-coverage GRU corrections; 26 leaves confirmation unopened in this workflow. |
+| `book_lab_v3_plan_pilot_64_64_64_20261017.json` | 64/64/64 internal split, data fingerprints and historical-exposure caveat. |
+| `Connectome_Expanded_Feature_Hypothesis_Lab(1).ipynb` | Saved Ridge outputs and partial GRU log; confirmation disabled. |
+| `Connectome_Horizons_Rolling_Plots(3).ipynb` | Saved horizon, gap/factor and decoder outputs; synthetic checks separated from real-data probes. |
+
+This revision reviews saved outputs and supplied reports. Competition parquet files, the newest production checkpoint and its full training source/configuration were not attached; no new competition-data training or result replication was performed here.
+
+### External primary sources
+
+Access reviewed 21 October 2026. A retrievable title alone is not treated as a verified explanation of a winning method.
+
+- **[S1]** [Connectome data and scoring specification](https://wundernn.io/connectome/docs/data_overview).
+- **[S2]** [Connectome FAQ: data use, state reset and execution budget](https://wundernn.io/connectome/docs/faq).
+- **[S3]** [Optiver RV first-place nearest-neighbours write-up](https://www.kaggle.com/competitions/optiver-realized-volatility-prediction/writeups/nyanp-1st-place-solution-nearest-neighbors). Indexed title/identity retrieved; detailed body access limited.
+- **[S4]** [Optiver RV seventh-place author's repository and reconstruction account](https://github.com/michaelpoluektov/orvp).
+- **[S5]** [HYD's Optiver Close first-place write-up](https://www.kaggle.com/competitions/optiver-trading-at-the-close/writeups/hyd-1st-place-solution); relevant author text was retrievable through [HYD's write-up index](https://www.kaggle.com/hydantess/writeups).
+- **[S6]** [ADAM's ninth-place write-up](https://www.kaggle.com/competitions/optiver-trading-at-the-close/writeups/adam-9th-place-solution) and [original training repository](https://github.com/ChunhanLi/9th-kaggle-optiver-trading-close).
+- **[S7]** [Yirun's first-place supervised-autoencoder/MLP discussion](https://www.kaggle.com/c/jane-street-market-prediction/discussion/224348).
+- **[S8]** [ZLF's MITSUI fifth-place RNN/MLP account](https://www.kaggle.com/competitions/mitsui-commodity-prediction-challenge/writeups/zlf-solution-of-the-mitsui-commodity-predict).
+- **[S9]** [Jane Street real-time API lag-use discussion](https://www.kaggle.com/competitions/jane-street-real-time-market-data-forecasting/discussion/545073). This is an original implementation discussion, not a verified winning recipe.
+- **[S10]** [Nathaniel Maddux's G-Research second-place solution](https://www.kaggle.com/competitions/g-research-crypto-forecasting/writeups/nathaniel-maddux-2nd-place-solution).
+- **[S11]** [Official Kaggle fifth-place Two Sigma Financial Modeling interview](https://medium.com/kaggle-blog/two-sigma-financial-modeling-code-competition-5th-place-winners-interview-team-best-fitting-279a493c76bd).
+- **[S12]** [Ubiquant first-place authors' account](https://www.kaggle.com/competitions/ubiquant-market-prediction/writeups/k-i-y-1st-place-solution-our-betting-strategy).
+- **[S13]** [Two Sigma News overview](https://www.kaggle.com/c/two-sigma-financial-news/overview) and [official data description](https://www.kaggle.com/competitions/two-sigma-financial-news/data).
+
+The supplied [PKSHA Optiver RV write-up](https://www.kaggle.com/competitions/optiver-realized-volatility-prediction/writeups/pksha-life-is-volatile-tentative-3rd-place-solutio) was located, but its method body was not extractable. It remains a reading item, not evidence for a specific imported architecture.
