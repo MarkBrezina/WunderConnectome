@@ -46,12 +46,18 @@ Can we also add orderbook direction changes due to the activities?
 5. We want to also add something measuring chunkiness, say volatility of the book, say stds of all the prices, say something like various horizons, stds of all the prices on 12, 24, 36, 124, etc. rolling window. We also want to check those linear regression slopes for windows like that.
 6. WE should also do something like rolling correlations, it might be that adjusting different importances, say how important are moving averages if the correllations increase.
 
+
+
+
+
 ## Hypothesis tested
 
 
 
 ## Information considered.
 I knew right off the bat that a range of similar competitions had taken place. 
+So I wanted to utilise the solutions from their winners.
+
 
 
 
